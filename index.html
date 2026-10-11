@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trip Planner</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#14181f;--mu:#6b7280;--ac:#0d9488;--on:#fff;--bd:#e5e7eb;--bad:#dc2626;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1318;--card:#181e26;--tx:#e8ecf1;--mu:#8b95a3;--ac:#2dd4bf;--on:#06201c;--bd:#262e39}}
+:root[data-theme="dark"]{--bg:#0f1318;--card:#181e26;--tx:#e8ecf1;--mu:#8b95a3;--ac:#2dd4bf;--on:#06201c;--bd:#262e39}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:16px 16px 4px;max-width:640px;margin:auto}
+header h1{margin:0;font-size:22px}
+header small{color:var(--mu)}
+main{max-width:640px;margin:auto;padding:8px 16px 96px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
+h2,h3{margin:0 0 10px;font-size:16px}
+.mu{color:var(--mu)}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;min-width:0}
+textarea{min-height:50vh;resize:vertical}
+label{display:block;font-size:12px;color:var(--mu)}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.g input:nth-child(1),.g input:nth-child(2){grid-column:span 2}
+.add{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.add input{flex:1 1 90px}
+.add input[type=time]{flex:0 0 105px}
+button{font:inherit;cursor:pointer}
+.pri{background:var(--ac);color:var(--on);border:0;border-radius:10px;padding:10px 14px;font-weight:600}
+.x{background:none;border:0;color:var(--mu);padding:4px 8px}
+.row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)}
+.row:last-of-type{border-bottom:0}
+.row span{flex:1;min-width:0;word-break:break-word}
+.row input[type=checkbox]{width:20px;height:20px;flex:none;accent-color:var(--ac)}
+.row a{text-decoration:none}
+.dn{text-decoration:line-through;color:var(--mu)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:4px 0 2px}
+.chip{flex:none;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:12px;padding:6px 12px;display:flex;flex-direction:column;align-items:center;line-height:1.2}
+.chip small{color:var(--mu)}
+.chip.on{background:var(--ac);color:var(--on);border-color:var(--ac)}
+.chip.on small{color:var(--on)}
+.bar{height:8px;background:var(--bd);border-radius:6px;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%;background:var(--ac)}
+.bar.over i{background:var(--bad)}
+.big{font-size:26px;font-weight:700}
+.sp{display:flex;justify-content:space-between;gap:8px}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--bd);display:flex;padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;background:none;border:0;color:var(--mu);padding:10px 2px;font-size:12px}
+nav button b{display:block;font-size:20px;font-weight:400}
+nav button.on{color:var(--ac);font-weight:600}
+</style>
+</head>
+<body>
+<header><h1 id="ttl">My Trip</h1><small id="sub"></small></header>
+<main id="app"></main>
+<nav>
+<button data-tab="plan"><b>🗺️</b>Plan</button>
+<button data-tab="today"><b>📍</b>Today</button>
+<button data-tab="budget"><b>💰</b>Budget</button>
+<button data-tab="pack"><b>🎒</b>Pack</button>
+<button data-tab="notes"><b>📝</b>Notes</button>
+</nav>
+<script>
+const KEY='tripplanner_v1',CATS=['Food','Stay','Transport','Activities','Shopping','Other'];
+let S=null;
+try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+S=S||{trip:{name:'',dest:'',start:'',end:'',budget:0,cur:'₹'},days:{},exp:[],pack:[],notes:''};
+let tab='plan',sel=null;
+const $=s=>document.querySelector(s);
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const fmt=s=>new Date(s+'T00:00').toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'});
+const money=n=>(S.trip.cur||'')+Math.round(n).toLocaleString();
+const map=n=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(n+' '+S.trip.dest);
+function dates(){
+  const T=S.trip;if(!T.start||!T.end)return[];
+  const a=[],e=new Date(T.end+'T00:00');let d=new Date(T.start+'T00:00');
+  while(d<=e&&a.length<60){a.push(iso(d));d.setDate(d.getDate()+1)}
+  return a;
+}
+const catSel='<select class="c">'+CATS.map(c=>'<option>'+c+'</option>').join('')+'</select>';
+function stops(d){
+  return (S.days[d]||[]).slice().sort((a,b)=>a.t.localeCompare(b.t)).map(s=>
+    `<div class="row"><input type="checkbox" data-act="tog" data-d="${d}" data-id="${s.id}" ${s.done?'checked':''}>
+    <span class="${s.done?'dn':''}">${s.t?'<b>'+esc(s.t)+'</b> ':''}${esc(s.n)}</span>
+    <a href="${map(s.n)}" target="_blank" rel="noopener" title="Open in Maps">📍</a>
+    <button class="x" data-act="delStop" data-d="${d}" data-id="${s.id}">✕</button></div>`).join('')
+    ||'<p class="mu">No stops yet.</p>';
+}
+const addStop=d=>`<div class="add"><input class="t" type="time"><input class="n" placeholder="Add stop / activity"><button class="pri" data-act="addStop" data-d="${d}">Add</button></div>`;
+const addExp=d=>`<div class="add"><input class="n" placeholder="What for?"><input class="m" type="number" inputmode="decimal" placeholder="Amount">${catSel}<button class="pri" data-act="addExp" data-d="${d||''}">Add</button></div>`;
+
+function plan(){
+  const T=S.trip,dts=dates();
+  return `<div class="card"><h2>Trip details</h2><div class="g">
+    <input id="tn" placeholder="Trip name" value="${esc(T.name)}">
+    <input id="td" placeholder="Destination" value="${esc(T.dest)}">
+    <label>Start<input id="ts" type="date" value="${T.start}"></label>
+    <label>End<input id="te" type="date" value="${T.end}"></label>
+    <label>Total budget<input id="tb" type="number" inputmode="decimal" value="${T.budget||''}"></label>
+    <label>Currency<input id="tc" value="${esc(T.cur)}"></label></div>
+    <button class="pri" data-act="saveTrip">Save trip</button></div>`
+  +(dts.length?dts.map((d,i)=>`<div class="card"><h3>Day ${i+1} · ${fmt(d)}</h3>${stops(d)}${addStop(d)}</div>`).join('')
+    :'<p class="mu">Set your start and end dates to build the day-by-day plan.</p>');
+}
+function today(){
+  const dts=dates();
+  if(!dts.length)return '<p class="mu">Set your trip dates in the Plan tab first.</p>';
+  const t=iso(new Date()),d=sel&&dts.includes(sel)?sel:(dts.includes(t)?t:dts[0]);
+  const list=S.days[d]||[],done=list.filter(s=>s.done).length;
+  const spent=S.exp.filter(e=>e.d===d).reduce((a,e)=>a+e.amt,0);
+  return `<div class="chips">${dts.map((x,i)=>`<button class="chip ${x===d?'on':''}" data-act="selDay" data-d="${x}">D${i+1}<small>${new Date(x+'T00:00').getDate()}</small></button>`).join('')}</div>
+  <div class="card"><div class="sp"><h2>${d===t?'Today · ':''}${fmt(d)}</h2><span class="mu">${done}/${list.length} done</span></div>
+  <div class="bar"><i style="width:${list.length?done/list.length*100:0}%"></i></div>
+  ${stops(d)}${addStop(d)}</div>
+  <div class="card"><div class="sp"><h3>Spent this day</h3><b>${money(spent)}</b></div>${addExp(d)}</div>`;
+}
+function budget(){
+  const T=S.trip,total=S.exp.reduce((a,e)=>a+e.amt,0),pct=T.budget?Math.min(100,total/T.budget*100):0;
+  const by=CATS.map(c=>[c,S.exp.filter(e=>e.cat===c).reduce((a,e)=>a+e.amt,0)]).filter(x=>x[1]);
+  const exps=S.exp.slice().sort((a,b)=>b.d.localeCompare(a.d));
+  return `<div class="card"><div class="mu">Spent</div><div class="big">${money(total)}</div>
+  ${T.budget?`<div class="bar ${total>T.budget?'over':''}"><i style="width:${pct}%"></i></div>
+  <div class="sp"><span class="mu">Budget ${money(T.budget)}</span><b style="color:${total>T.budget?'var(--bad)':'inherit'}">${total>T.budget?'Over by '+money(total-T.budget):money(T.budget-total)+' left'}</b></div>`:'<p class="mu">Set a total budget in the Plan tab.</p>'}
+  ${by.map(x=>`<div class="sp mu"><span>${x[0]}</span><span>${money(x[1])}</span></div>`).join('')}</div>
+  <div class="card"><h3>Add expense</h3>${addExp('')}</div>
+  <div class="card"><h3>Expenses</h3>${exps.map(e=>`<div class="row"><span>${esc(e.desc)}<br><small class="mu">${fmt(e.d)} · ${e.cat}</small></span><b>${money(e.amt)}</b><button class="x" data-act="delExp" data-id="${e.id}">✕</button></div>`).join('')||'<p class="mu">Nothing yet.</p>'}</div>`;
+}
+function pack(){
+  const done=S.pack.filter(p=>p.done).length;
+  return `<div class="card"><div class="sp"><h2>Packing list</h2><span class="mu">${done}/${S.pack.length}</span></div>
+  <div class="bar"><i style="width:${S.pack.length?done/S.pack.length*100:0}%"></i></div>
+  ${S.pack.map(p=>`<div class="row"><input type="checkbox" data-act="togP" data-id="${p.id}" ${p.done?'checked':''}><span class="${p.done?'dn':''}">${esc(p.t)}</span><button class="x" data-act="delP" data-id="${p.id}">✕</button></div>`).join('')||'<p class="mu">Empty list.</p>'}
+  <div class="add"><input class="n" placeholder="Add item"><button class="pri" data-act="addP">Add</button></div>
+  <div class="add"><button class="x" data-act="sample">+ Add common essentials</button></div></div>`;
+}
+const notes=()=>`<div class="card"><h2>Notes &amp; bookings</h2><textarea id="nt" placeholder="Hotel confirmations, flight / train numbers, emergency contacts, addresses...">${esc(S.notes)}</textarea></div>`;
+
+function render(){
+  $('#app').innerHTML=({plan,today,budget,pack,notes})[tab]();
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  const T=S.trip;
+  $('#ttl').textContent=T.name||'My Trip';
+  $('#sub').textContent=[T.dest,T.start&&T.end?fmt(T.start)+' → '+fmt(T.end):''].filter(Boolean).join(' · ');
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act],[data-tab]');if(!b)return;
+  if(b.dataset.tab){tab=b.dataset.tab;render();window.scrollTo(0,0);return}
+  const a=b.dataset.act,d=b.dataset.d,id=b.dataset.id,box=b.closest('.add');
+  const v=c=>box&&box.querySelector(c)?box.querySelector(c).value.trim():'';
+  if(a==='saveTrip'){S.trip={...S.trip,name:$('#tn').value.trim(),dest:$('#td').value.trim(),start:$('#ts').value,end:$('#te').value,budget:+$('#tb').value||0,cur:$('#tc').value};}
+  else if(a==='addStop'){if(!v('.n'))return;(S.days[d]=S.days[d]||[]).push({id:uid(),t:v('.t'),n:v('.n'),done:false});}
+  else if(a==='tog'){const s=(S.days[d]||[]).find(x=>x.id===id);if(s)s.done=!s.done;}
+  else if(a==='delStop'){S.days[d]=(S.days[d]||[]).filter(x=>x.id!==id);}
+  else if(a==='selDay'){sel=d;}
+  else if(a==='addExp'){const amt=+v('.m');if(!amt)return;S.exp.push({id:uid(),d:d||iso(new Date()),desc:v('.n')||'Expense',cat:v('.c')||'Other',amt});}
+  else if(a==='delExp'){S.exp=S.exp.filter(x=>x.id!==id);}
+  else if(a==='addP'){if(!v('.n'))return;S.pack.push({id:uid(),t:v('.n'),done:false});}
+  else if(a==='togP'){const p=S.pack.find(x=>x.id===id);if(p)p.done=!p.done;}
+  else if(a==='delP'){S.pack=S.pack.filter(x=>x.id!==id);}
+  else if(a==='sample'){['ID / passport','Tickets & bookings','Phone + charger','Power bank','Wallet / cash','Medicines','Toiletries','Clothes','Sunglasses','Water bottle'].forEach(t=>{if(!S.pack.some(p=>p.t===t))S.pack.push({id:uid(),t,done:false})});}
+  save();render();
+});
+document.addEventListener('input',e=>{if(e.target.id==='nt'){S.notes=e.target.value;save()}});
+render();
+</script>
+</body>
+</html>
